@@ -1,0 +1,45 @@
+---
+- hosts: satellite-server
+  remote_user: root
+  become: yes
+  vars:
+    packages:
+      - dracut-fips
+      - dracut-fips-aesni
+  tasks:
+    - name: install fips required package
+      yum:
+        name: "dracut-fips"
+        state: present
+
+    - name: check if dracut-fips-aesni is needed
+      shell: grep -qw aes /proc/cpuinfo && echo YES || echo no
+      register: dr_fips_aesni
+
+    - name: install aesni dracut package
+      yum:
+        name: dracut-fips-aesni
+        state: present
+
+    - name: remove prelink package
+      yum:
+        name: prelink
+        state: absent
+
+    - name: Rebuild initramfs
+      shell: dracut
+
+    - name: edit kernel command-line to set fips to 1
+      shell: grubby --update-kernel=DEFAULT --args=fips=1
+
+    - name: get uuid for boot
+      shell: findmnt -no uuid /boot
+      register: boot_uuid
+
+    - name: edit kernel line to include the boot uuid
+      shell: >
+         grubby --update-kernel=DEFAULT \
+         --args=boot=UUID={{ boot_uuid.stdout }}
+
+    - name: reboot system
+      reboot:
